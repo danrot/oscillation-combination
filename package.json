@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@cycle/dom": "^14.0.0",
+    "@cycle/isolate": "^1.4.0",
     "@cycle/xstream-run": "^3.1.0",
     "xstream": "^7.0.0"
   },
