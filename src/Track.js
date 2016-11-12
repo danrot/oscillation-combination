@@ -20,14 +20,16 @@ function model(action$, itemFn) {
   function createNewTrack(props) {
     const id = mutableLastId++;
     const sinks = itemFn(props, id);
-    return {id, DOM: sinks.DOM.remember(), Remove: sinks.Remove};
+    return {id, DOM: sinks.DOM.remember(), Remove: sinks.Remove, WebAudio: sinks.WebAudio};
   }
+
+  const initialState = [createNewTrack({frequency: DEFAULT_SEQ_FREQUENCY$, volume: 1})]
 
   const addSeqReducer$ = action$
     .filter(a => a.type === 'ADD_SEQ')
     .map(action => {
       let newItems = [];
-      newItems.push(createNewTrack({frequency: DEFAULT_SEQ_FREQUENCY$}));
+      newItems.push(initialState);
       return function addSeqReducer(listItems) {
         return listItems.concat(newItems);
       };
@@ -39,7 +41,6 @@ function model(action$, itemFn) {
       return listItems.filter(item => item.id !== action.payload);
     });
 
-  const initialState = [createNewTrack({frequency: DEFAULT_SEQ_FREQUENCY$})]
 
   return xs.merge(addSeqReducer$, removeSeqReducer$)
     .fold((listItems, reducer) => reducer(listItems), initialState);
@@ -68,12 +69,24 @@ function view(sequences$) {
   }).flatten();
 }
 
+function audio(sequences$) {
+    const webAudio$ = sequences$.map(sequences => sequences.map(sequence => sequence.WebAudio));
+    let webAudios$ = [];
+
+    webAudio$.addListener({
+        next: webAudio => webAudios$.push(...webAudio)
+    });
+
+    return xs.combine(...webAudios$);
+}
+
 function makeItemWrapper(DOM) {
   return function itemWrapper(props, id) {
     const track = isolate(Sequence)({DOM, Props: xs.of(props)});
     return {
       DOM: track.DOM,
-      Remove: track.Remove.mapTo(id)
+      Remove: track.Remove.mapTo(id),
+      WebAudio: track.WebAudio
     }
   }
 }
@@ -88,10 +101,12 @@ function Track(sources) {
     .flatten();
   proxySeqRemove$.imitate(sequenceRemove$);
   const vtree$ = view(sequences$);
+  const audio$ = audio(sequences$);
 
   return {
     DOM: vtree$,
     Remove: action$.filter(action => action.type === 'REMOVE'),
+    WebAudio: audio$
   };
 }
 

@@ -13,23 +13,15 @@ function intent(DOM, trackRemove$) {
 }
 
 function model(action$, itemFn) {
-  function createRandomItemProps() {
-    let hexColor = Math.floor(Math.random() * 16777215).toString(16);
-    while (hexColor.length < 6) {
-      hexColor = '0' + hexColor;
-    }
-    hexColor = '#' + hexColor;
-    const randomWidth = Math.floor(Math.random() * 800 + 200);
-    return {color: hexColor, width: randomWidth};
-  }
-
   let mutableLastId = 0;
 
   function createNewItem(props) {
     const id = mutableLastId++;
     const sinks = itemFn(props, id);
-    return {id, DOM: sinks.DOM.remember(), Remove: sinks.Remove};
+    return {id, DOM: sinks.DOM.remember(), Remove: sinks.Remove, WebAudio: sinks.WebAudio.remember()};
   }
+
+  const initialState = [createNewItem({frequency: 200, volume: 1})]
 
   const addItemReducer$ = action$
     .filter(a => a.type === 'ADD_TRACK')
@@ -37,7 +29,7 @@ function model(action$, itemFn) {
       const amount = action.payload;
       let newItems = [];
       for (let i = 0; i < amount; i++) {
-        newItems.push(createNewItem(createRandomItemProps()));
+        newItems.push({frequency: 200, volume: 1});
       }
       return function addItemReducer(listItems) {
         return listItems.concat(newItems);
@@ -49,8 +41,6 @@ function model(action$, itemFn) {
     .map(action => function removeItemReducer(listItems) {
       return listItems.filter(item => item.id !== action.payload);
     });
-
-  const initialState = [createNewItem({color: 'red', width: 300})]
 
   return xs.merge(addItemReducer$, removeItemReducer$)
     .fold((listItems, reducer) => reducer(listItems), initialState);
@@ -72,11 +62,24 @@ function view(tracks$) {
   }).flatten();
 }
 
+function audio(tracks$) {
+    const webAudio$ = tracks$.map(tracks => tracks.map(track => track.WebAudio));
+
+    let webAudios$ = [];
+
+    webAudio$.addListener({
+        next: webAudio => webAudios$.push(...webAudio)
+    });
+
+    return webAudios$[0];
+}
+
 function makeItemWrapper(DOM) {
   return function itemWrapper(props, id) {
     const track = isolate(Track)({DOM, Props: xs.of(props)});
     return {
       DOM: track.DOM,
+      WebAudio: track.WebAudio,
       Remove: track.Remove.mapTo(id)
     }
   }
@@ -92,9 +95,11 @@ function List(sources) {
     .flatten();
   proxyTrackRemove$.imitate(trackRemove$);
   const vtree$ = view(tracks$);
+  const audio$ = audio(tracks$);
 
   return {
-    DOM: vtree$
+    DOM: vtree$,
+    WebAudio: audio$
   };
 }
 
